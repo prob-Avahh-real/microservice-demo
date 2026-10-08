@@ -282,9 +282,12 @@ npm run build:apk            # 产出 android/app/build/outputs/apk/debug/app-de
 > 但网关本身监听 `0.0.0.0:8080`，所以真机仍然可以通过局域网 IP 访问网关。
 > 真机能不能连上取决于 macOS 防火墙与 Clash 的分流规则，未在本机验证。
 
-构建环境（已固化在 `mobile/scripts/build-apk.sh` 与 `android/gradle.properties` 里）：
+构建环境（固化在 `mobile/scripts/build-apk.sh`；受版本控制的配置里**不含任何本机绝对路径**）：
 
-- JDK **21**（AGP 8.2.1 不支持 JDK 24/27）
-- Android SDK 在 `/opt/homebrew/share/android-commandlinetools`（**不是** `~/Library/Android/sdk`）
-- `google()` 仓库要走 Clash 代理（`127.0.0.1:7897`），直连不通
+- JDK **21**：AGP 8.2.1 不支持 JDK 24/27。由 `build-apk.sh` 显式 `export JAVA_HOME` 注入，
+  **不写进** `gradle.properties` —— 那是受控文件，写死本机路径会让 CI 和别人的机器构建失败
+- Android SDK：`${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}`
+  （本机在 Homebrew 的 commandlinetools，**不是** `~/Library/Android/sdk`；CI 上用 runner 自带的）
+- 依赖仓库：**国内镜像优先（腾讯/阿里）+ 官方源兜底，不用代理**
+  （`maven.google.com` / `dl.google.com` 直连被墙，而 Gradle 走 Clash 代理会 TLS 握手失败）
 - Capacitor 6.2.2 → AGP 8.2.1 / Gradle 8.2.1 / compileSdk 34

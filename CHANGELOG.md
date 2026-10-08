@@ -46,6 +46,19 @@
 - `mobile/package.json` 拆出 `test:unit` / `test:live`，让纯逻辑单测无需后端即可并行跑
 - 工作流经 `actionlint` 校验（0 问题）
 
+### Fixed（CI 首次真实运行暴露的两个「本机假设」）
+
+- **`gradle-wrapper.jar` 从未进过仓库**：`.gitignore` 里的 `*.jar` 误伤了 Gradle wrapper 的引导 jar。
+  本地因文件就在磁盘上所以一直能构建，CI 从仓库检出必挂：
+  `Could not find or load main class org.gradle.wrapper.GradleWrapperMain`
+  → 放行 `!**/gradle/wrapper/gradle-wrapper.jar`
+- **受控文件里写死了本机 JDK 路径**：`mobile/android/gradle.properties` 的
+  `org.gradle.java.home=/opt/homebrew/...` 让 CI 报 `Java home supplied is invalid`
+  → 移除该行，改由 `build-apk.sh` 注入 `JAVA_HOME`（本机与 CI 同一套逻辑）
+- **「本机干净检出」验证有盲区**：同一台机器上那些路径依然存在，所以这类问题只有换机器才暴露
+  → `scripts/lint-sh.sh` 增加第 3 项检查：受版本控制的配置类文件（properties / gradle / xml / yml / json …）
+  不得出现 `/opt/homebrew` 或 `/Users/` 绝对路径（并做过反向测试，确认它会报警）
+
 ### Tests
 
 - 后端 **22 项通过**：inventory 10（6 纯逻辑单测 + 4 HTTP 集成）、order 10（6 + 4）、gateway 2（路由加载断言）
