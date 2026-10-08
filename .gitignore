@@ -1,6 +1,10 @@
 # Build
 target/
 *.jar
+# Gradle wrapper 的 bootstrap jar 必须进仓库，否则 CI/别人克隆后报
+# "Could not find or load main class org.gradle.wrapper.GradleWrapperMain"
+# （踩过一次：本地文件存在所以本地能构建，CI 上必挂）
+!**/gradle/wrapper/gradle-wrapper.jar
 !.mvn/wrapper/maven-wrapper.jar
 .mvn/wrapper/maven-wrapper.properties
 
