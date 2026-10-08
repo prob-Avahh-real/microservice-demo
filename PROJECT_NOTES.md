@@ -178,7 +178,12 @@
 
 ## 明确定义「完成」（Done）
 
-`bash scripts/e2e.sh` 输出 8/8 PASS 且退出码 0；`mvn test` 全绿；`mobile/android` 产出 APK。
+**本地**：`mvn -B -ntp clean install` 全绿 + `bash scripts/e2e.sh` 8/8 PASS 且退出码 0
++ `mobile` 测试全绿 + APK 产出并通过 `verify-apk.sh`。
+
+**CI**：`.github/workflows/ci.yml` 的 `backend` / `mobile-unit` / `android` 三个 job 全绿
+（= 上面那套命令在一台干净的 runner 上同样通过）。
+
 任一条未达成即视为未完成，不允许「看着还行」。
 
 ## 停止条件

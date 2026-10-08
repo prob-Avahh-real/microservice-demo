@@ -1,0 +1,196 @@
+name: CI
+
+# 与本地同一套命令：本地绿 = CI 绿（避免「我机器上能跑」）。
+# 本工程零外部中间件（不用 Docker/MySQL/Nacos），所以 runner 上直接起 5 个进程即可。
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # 同一分支的新推送取消上一次未跑完的任务，省额度也避免排队
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # 后端：脚本体检 → 编译单测 → 端到端验收（真实起 5 个进程 + 8 项断言）
+  # ------------------------------------------------------------------
+  backend:
+    name: 后端（lint + 构建 + 单测 + 端到端）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: shell 脚本体检（bash -n + bash 3.2 多字节变量名坑）
+        run: bash scripts/lint-sh.sh
+
+      - name: 编译 + 单测（22 项）
+        run: mvn -B -ntp clean install
+
+      - name: 端到端验收（起 5 个进程，8 项断言，退出码即结论）
+        run: bash scripts/e2e.sh
+
+      - name: 失败时上传服务日志（排查用）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            .run/logs/
+            .run/e2e.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 上传可执行 jar（供 Android job 与 Release 使用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-jars
+          # 各模块 target/ 下的 fat jar；run-all.sh 会自行忽略 .jar.original
+          path: |
+            */target/*.jar
+            !*/target/*.jar.original
+          retention-days: 7
+
+      - name: 停止服务
+        if: always()
+        run: bash scripts/stop-all.sh || true
+
+  # ------------------------------------------------------------------
+  # 客户端纯逻辑单测：不依赖后端，与 backend 并行 → 最快反馈
+  # ------------------------------------------------------------------
+  mobile-unit:
+    name: Android 客户端（纯逻辑单测）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: 安装依赖（postinstall 会打国内镜像补丁）
+        working-directory: mobile
+        run: npm ci
+
+      - name: 纯逻辑单测（8 项，注入假 fetch）
+        working-directory: mobile
+        run: npm run test:unit
+
+  # ------------------------------------------------------------------
+  # Android：需要真网关 → 依赖 backend 的 jar；跑链路测试 + 出 APK + 校验产物
+  # ------------------------------------------------------------------
+  android:
+    name: Android 客户端（链路测试 + APK）
+    runs-on: ubuntu-latest
+    needs: backend
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: 取回后端 jar（artifact 会还原成 <服务>/target/*.jar）
+        uses: actions/download-artifact@v4
+        with:
+          name: service-jars
+
+      - name: 起后端（链路测试要打真实网关）
+        run: |
+          chmod +x scripts/*.sh mobile/scripts/*.sh
+          bash scripts/run-all.sh
+
+      - name: 安装客户端依赖
+        working-directory: mobile
+        run: npm ci
+
+      - name: 客户端测试（8 单测 + 6 项打真实网关的链路测试）
+        working-directory: mobile
+        run: npm test
+
+      - name: 构建 APK
+        working-directory: mobile
+        run: npm run build:apk
+
+      - name: 校验 APK 产物（aapt2 真解析 + 包内 web 资源）
+        run: bash mobile/scripts/verify-apk.sh
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: 失败时上传服务日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-service-logs
+          path: .run/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 停止服务
+        if: always()
+        run: bash scripts/stop-all.sh || true
+
+  # ------------------------------------------------------------------
+  # CD：打 tag 时把 jar 与 APK 附到 GitHub Release
+  # ------------------------------------------------------------------
+  release:
+    name: CD（打 tag → 发 Release 并附产物）
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    needs: [backend, android]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 取回 jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-jars
+
+      - name: 取回 APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug-apk
+
+      - name: 发 Release（自动生成说明 + 附 jar/APK）
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            app-debug.apk
+            */target/*.jar

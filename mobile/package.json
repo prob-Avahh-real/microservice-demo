@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:unit": "node --test test/api.unit.test.js",
+    "test:live": "node --test test/api.live.test.js",
     "sync": "cap sync android",
     "postinstall": "node scripts/patch-capacitor-repos.cjs",
     "build:apk": "bash scripts/build-apk.sh"

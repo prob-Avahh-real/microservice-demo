@@ -213,7 +213,40 @@ curl -X POST -H 'Content-Type: application/json' \
 
 ---
 
-## 十、Android 客户端
+## 十一、CI / CD
+
+`.github/workflows/ci.yml`（GitHub Actions）。**CI 跑的就是本地那套命令**，避免「我机器上能跑」。
+
+| Job | 内容 | 依赖 |
+|-----|------|------|
+| `backend` | `lint-sh.sh` → `mvn -B -ntp clean install`（22 测试）→ `e2e.sh`（起 5 进程 / 8 断言）→ 上传 5 个 jar | — |
+| `mobile-unit` | `npm ci` → `npm run test:unit`（8 项纯逻辑单测） | —（与 backend **并行**，快速失败） |
+| `android` | 取回 jar → `run-all.sh` → `npm test`（14 项，含打真网关的链路测试）→ `build:apk` → `verify-apk.sh` → 上传 APK | `backend` |
+| `release` | 打 tag 时把 jar + APK 附到 GitHub Release | `backend` + `android` |
+
+本地等价的完整门禁：
+
+```bash
+bash scripts/lint-sh.sh
+mvn -B -ntp clean install
+bash scripts/e2e.sh
+cd mobile && npm ci && npm test && npm run build:apk && bash scripts/verify-apk.sh
+```
+
+**设计取舍**
+
+- **不引 Docker / Testcontainers**：本工程零外部中间件（H2 内存库），runner 上直接起 5 个 JVM
+  更贴近真实运行形态，也更快；为「看起来先进」引入容器只会增加偶然复杂性。
+- **移动端单测与后端并行**：客户端逻辑的正确性不该等后端跑完 2–3 分钟才知道。
+- **失败时上传 `.run/logs/` 与 `.run/e2e.log`**：CI 挂了要能看出是哪个服务没起来，而不是只给个红叉。
+- **CD 只做产物发布**（jar + APK 附 Release）：本工程没有可推的部署环境，
+  不假装有 CD 环境（区分「验证过的」和「声称的」）。
+- CI 上的仓库走**官方源**（GitHub runner 能直连 `google()`/Central），
+  本机走国内镜像 —— 仓库列表是「镜像优先 + 官方兜底」，两种环境都能过。
+
+---
+
+## 十二、Android 客户端
 
 `mobile/` 是 Capacitor 工程，`mobile/www/` 里的界面经网关调用后端。
 

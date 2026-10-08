@@ -35,6 +35,17 @@
 - `scripts/lint-sh.sh` —— shell Sensor：`bash -n` + 抓「`$var` 紧跟非 ASCII 字符」的 bash 3.2 变量名坑
 - `mobile/test/api.live.test.js` —— 用 App 自己的 API 模块打**真实运行中的**网关，验证「客户端逻辑 ↔ 网关 ↔ 后端服务」确实接通
 
+### Added — CI/CD
+
+- `.github/workflows/ci.yml` —— 4 个 job：`backend`（lint → 构建单测 → 端到端）/
+  `mobile-unit`（与 backend **并行**，快速失败）/ `android`（取回 jar → 起服务 → 链路测试 → 出 APK → 校验产物）/
+  `release`（打 tag 时把 jar 与 APK 附到 GitHub Release）
+- CI 跑的就是本地那套命令，本地绿 = CI 绿，避免「我机器上能跑」
+- 失败时上传 `.run/logs/` 与 `.run/e2e.log`；成功上传 5 个 jar 与 APK 作为可下载产物
+- `scripts/stop-all.sh` 增加 lsof 缺失时的兜底（Linux runner 通常没装 lsof，原来会直接失效）
+- `mobile/package.json` 拆出 `test:unit` / `test:live`，让纯逻辑单测无需后端即可并行跑
+- 工作流经 `actionlint` 校验（0 问题）
+
 ### Tests
 
 - 后端 **22 项通过**：inventory 10（6 纯逻辑单测 + 4 HTTP 集成）、order 10（6 + 4）、gateway 2（路由加载断言）
@@ -74,9 +85,8 @@
 
 ### Not produced（Phase 9 清单中尚未产出的项）
 
-- CI/CD 流水线
 - 代码审查 / 安全审计 / 依赖审计报告（`code-review-reports/`）
-- `git tag: engineering-v2-<date>`
+- `git tag: engineering-v2-<date>`（CD 的 Release 需要打 tag 触发，本版尚未打）
 
 ## [Unreleased]
 
