@@ -130,6 +130,7 @@ bash mobile/scripts/verify-apk.sh   # 用 aapt2 真解析 APK + 校验包内 web
 ## 文档
 
 - `README.md` —— 架构、接口清单、验收说明、工程取舍表、9 条已知限制
+- `CHANGELOG.md` —— 版本变更记录（Keep a Changelog 体例），含「未验证 / 未产出」清单
 - `PROJECT_NOTES.md` —— 里程碑台账（Done 判据 / 停止条件）+ 28 条踩坑清单
 - 可复用知识已沉淀为 skill `spring-cloud-microservices`（含 Capacitor 本地构建 reference）
 
