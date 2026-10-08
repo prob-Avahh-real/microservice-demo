@@ -244,6 +244,16 @@ cd mobile && npm ci && npm test && npm run build:apk && bash scripts/verify-apk.
 - CI 上的仓库走**官方源**（GitHub runner 能直连 `google()`/Central），
   本机走国内镜像 —— 仓库列表是「镜像优先 + 官方兜底」，两种环境都能过。
 
+**本机推送说明**：这台机器 `github.com` 直连不通（实测 HTTP 000 / `Empty reply from server`），
+git 走 Clash 代理即可（实测 200）：
+
+```bash
+git -c http.proxy=http://127.0.0.1:7897 push
+```
+
+已为本仓库设置了 `git config --local http.proxy`，所以直接 `git push` 就行。
+换机器或 Clash 没开时要去掉：`git config --local --unset http.proxy`。
+
 ---
 
 ## 十二、Android 客户端
