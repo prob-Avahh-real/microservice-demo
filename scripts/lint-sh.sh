@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 #
-# shell 脚本体检（Sensor）—— 抓两类**反复踩过**的坑，不用靠记忆：
+# 仓库体检（Sensor）—— 抓三类**反复踩过**的坑，不用靠记忆：
 #
 #   1. bash 3.2（macOS 自带）会把「紧跟变量的多字节字符」吃进变量名：
 #        "...= $before（链路..."  → 变量名变成 before<乱码> → unbound variable
 #      本工程已经栽过两次，所以做成自动检查，而不是写在文档里提醒自己。
 #
 #   2. 语法错误：bash -n
+#
+#   3. 受版本控制的配置里写本机绝对路径（/opt/homebrew、/Users/...）：
+#      「本机干净检出」验证抓不到这类问题（同一台机器上那些路径依然存在），
+#      只有换机器（CI）才暴露 —— 实测被这个坑掉过一次 CI，故做成检查。
 #
 #   用法：bash scripts/lint-sh.sh
 #
@@ -60,11 +64,52 @@ PY
 py_status=$?
 (( py_status != 0 )) && problems=$((problems + 1))
 
+echo "── 3. 受版本控制的配置里有没有本机绝对路径 ──────────────"
+python3 - "$ROOT" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+pattern = re.compile(r'/opt/homebrew|/Users/')
+
+# 只扫「执行相关」的受控文件类型：
+#   - 不扫 *.md：文档里写路径是说明，不是配置
+#   - 不扫 *.sh：它们用 ${VAR:-默认值} 形式，可由环境覆盖（CI 已证明成立）
+watch_suffixes = {'.properties', '.gradle', '.xml', '.yml', '.yaml', '.toml', '.json', '.conf'}
+
+tracked = subprocess.run(
+    ['git', '-C', str(root), 'ls-files'], capture_output=True, text=True, check=True
+).stdout.split()
+
+bad = 0
+for rel in tracked:
+    path = Path(rel)
+    if path.suffix not in watch_suffixes:
+        continue
+    full = root / rel
+    if not full.is_file():
+        continue
+    for lineno, line in enumerate(full.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
+        if line.lstrip().startswith('#'):
+            continue
+        for match in pattern.finditer(line):
+            print(f"  ✘ {rel}:{lineno}  {match.group(0)}"
+                  f"  → 受控文件里别写本机绝对路径，改用环境变量或相对路径")
+            bad += 1
+
+print("  ✔ 未发现" if bad == 0 else f"  共 {bad} 处")
+sys.exit(1 if bad else 0)
+PY
+cfg_status=$?
+(( cfg_status != 0 )) && problems=$((problems + 1))
+
 echo
 if (( problems == 0 )); then
-  echo "✔ 脚本检查通过"
+  echo "✔ 仓库检查通过"
   exit 0
 else
-  echo "✘ 脚本检查发现 ${problems} 类问题"
+  echo "✘ 仓库检查发现 ${problems} 类问题"
   exit 1
 fi
