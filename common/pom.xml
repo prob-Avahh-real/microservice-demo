@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.demo</groupId>
+    <artifactId>microservice-demo</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>common</artifactId>
+  <name>common</name>
+  <description>跨服务共享的对外契约：DTO / 错误码 / 状态枚举（不放实现）</description>
+
+  <!--
+    Deliberately has NO spring-boot-maven-plugin: this module is a plain jar library,
+    not an executable. Keeps the contract module free of a main class.
+  -->
+
+  <dependencies>
+    <!-- 契约里的 @NotBlank/@Min 需要这份 API（只有注解，没有实现，很小） -->
+    <dependency>
+      <groupId>jakarta.validation</groupId>
+      <artifactId>jakarta.validation-api</artifactId>
+    </dependency>
+  </dependencies>
+</project>

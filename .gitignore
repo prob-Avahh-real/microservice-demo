@@ -1,0 +1,24 @@
+# Build
+target/
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# Runtime scratch (PID files + logs from scripts/run-all.sh)
+.run/
+*.log
+
+# Node / Capacitor
+node_modules/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/src/main/assets/public/
+mobile/.idea/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
