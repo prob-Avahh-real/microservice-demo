@@ -1,0 +1,11 @@
+{
+  "appId": "com.demo.microservice",
+  "appName": "微服务控制台",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "http"
+  }
+}

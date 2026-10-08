@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<title>微服务控制台</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --card: #171c24;
+    --card-2: #1f2630;
+    --border: #2a323e;
+    --fg: #e6edf3;
+    --muted: #8b98a9;
+    --accent: #4c9aff;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --error: #f87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 14px 14px 40px;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.55 -apple-system, "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  }
+  h1 { font-size: 19px; margin: 4px 0 2px; }
+  h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px; margin-bottom: 12px;
+  }
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 0 0 5px; }
+  input {
+    width: 100%; padding: 11px 12px; font-size: 15px;
+    background: var(--card-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row > *:first-child { flex: 2 1 0; min-width: 0; }
+  .row > *:last-child { flex: 1 1 0; min-width: 0; }
+  button {
+    width: 100%; margin-top: 11px; padding: 12px;
+    font-size: 15px; font-weight: 600; color: #fff;
+    background: var(--accent); border: 0; border-radius: 10px;
+  }
+  button.ghost { background: var(--card-2); color: var(--fg); border: 1px solid var(--border); }
+  button:active { opacity: .82; }
+  button[disabled] { opacity: .5; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+  .dot.ok { background: var(--ok); }
+  .dot.error { background: var(--error); }
+  .result { margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 13.5px;
+            background: var(--card-2); border-left: 4px solid var(--border); white-space: pre-wrap; word-break: break-word; }
+  .result.ok { border-left-color: var(--ok); }
+  .result.warn { border-left-color: var(--warn); }
+  .result.error { border-left-color: var(--error); }
+  .result b { display: block; margin-bottom: 3px; font-size: 14.5px; }
+  .kv { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 13px; }
+  .kv span:first-child { color: var(--muted); }
+  .kv span:last-child { font-family: ui-monospace, Menlo, monospace; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--muted);
+         max-height: 130px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { padding: 6px 11px; font-size: 12.5px; background: var(--card-2);
+          border: 1px solid var(--border); border-radius: 999px; }
+</style>
+</head>
+<body>
+  <h1>微服务控制台</h1>
+  <div class="sub">经 Spring Cloud 网关访问订单 / 库存服务</div>
+
+  <div class="card">
+    <h2>网关连接</h2>
+    <label for="baseUrl">网关地址</label>
+    <input id="baseUrl" autocomplete="off" autocapitalize="off" spellcheck="false" />
+    <div class="chips">
+      <span class="chip" data-url="http://10.0.2.2:8080">模拟器 10.0.2.2</span>
+      <span class="chip" data-url="http://localhost:8080">本机 localhost</span>
+    </div>
+    <button class="ghost" id="pingBtn">测试连接并保存</button>
+    <div class="status" style="margin-top:10px">
+      <span class="dot" id="dot"></span><span id="statusText">未连接</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>查询库存</h2>
+    <div class="row">
+      <div><label for="skuView">SKU</label><input id="skuView" value="MONITOR" autocapitalize="characters" /></div>
+      <div><button id="viewBtn" style="margin-top:0">查询</button></div>
+    </div>
+    <div class="result" id="viewResult" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <h2>下单</h2>
+    <div class="row">
+      <div><label for="skuOrder">SKU</label><input id="skuOrder" value="MONITOR" autocapitalize="characters" /></div>
+      <div><label for="qty">数量</label><input id="qty" type="number" min="1" value="3" inputmode="numeric" /></div>
+    </div>
+    <button id="orderBtn">下单</button>
+    <div class="result" id="orderResult" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <h2>降级开关（演示用）</h2>
+    <div class="sub" style="margin:0">打开后库存服务的写接口会返回 503，用来看熔断降级是否真的生效。</div>
+    <div class="row" style="margin-top:10px">
+      <div><button class="ghost" id="chaosOn" style="margin-top:0">打开故障注入</button></div>
+      <div><button class="ghost" id="chaosOff" style="margin-top:0">关闭</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>请求日志</h2>
+    <div class="log" id="log">（暂无）</div>
+  </div>
+
+<script type="module">
+import { createApiClient, normalizeBaseUrl, describeOrderResult, ApiError } from './api.js';
+
+const $ = (id) => document.getElementById(id);
+const STORAGE_KEY = 'microservice-demo.gateway';
+
+// Android 模拟器里 10.0.2.2 才是宿主机的 localhost
+const DEFAULT_URL = /Android/i.test(navigator.userAgent)
+  ? 'http://10.0.2.2:8080'
+  : 'http://localhost:8080';
+
+$('baseUrl').value = localStorage.getItem(STORAGE_KEY) || DEFAULT_URL;
+$('log').textContent = '';
+
+function log(line) {
+  const el = $('log');
+  const ts = new Date().toTimeString().slice(0, 8);
+  const prev = el.textContent === '（暂无）' ? '' : el.textContent + '\n';
+  el.textContent = `${prev}${ts}  ${line}`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(kind, text) {
+  $('dot').className = `dot ${kind}`;
+  $('statusText').textContent = text;
+}
+
+function showResult(elId, level, html) {
+  const el = $(elId);
+  el.className = `result ${level}`;
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function currentClient() {
+  return createApiClient($('baseUrl').value);
+}
+
+// ---- 连接 ----
+function ping() {
+  const url = normalizeBaseUrl($('baseUrl').value);
+  const client = createApiClient(url);
+  client.queryInventory('MONITOR')
+    .then((res) => {
+      localStorage.setItem(STORAGE_KEY, url);
+      setStatus('ok', `已连接 ${url}`);
+      log(`GET /api/inventory/MONITOR -> ok=${res?.ok}`);
+    })
+    .catch((err) => {
+      setStatus('error', err.message);
+      log(`连接失败：${err.message}`);
+    });
+}
+$('pingBtn').addEventListener('click', ping);
+
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    $('baseUrl').value = chip.dataset.url;
+    ping();
+  });
+});
+
+// ---- 查库存 ----
+$('viewBtn').addEventListener('click', async () => {
+  const sku = $('skuView').value.trim().toUpperCase();
+  log(`GET /api/inventory/${sku}`);
+  try {
+    const res = await currentClient().queryInventory(sku);
+    const d = res?.data ?? {};
+    showResult('viewResult', d.lowStock ? 'warn' : 'ok', `
+      <b>${d.sku ?? sku}</b>
+      <div class="kv"><span>可用库存</span><span>${d.available}</span></div>
+      <div class="kv"><span>已预占</span><span>${d.reserved}</span></div>
+      <div class="kv"><span>低于阈值</span><span>${d.lowStock ? '是' : '否'}</span></div>
+    `);
+  } catch (err) {
+    showResult('viewResult', 'error', `<b>查询失败</b>${err.message}`);
+    log(`失败：${err.message}`);
+  }
+});
+
+// ---- 下单 ----
+$('orderBtn').addEventListener('click', async () => {
+  const sku = $('skuOrder').value.trim().toUpperCase();
+  const quantity = Number($('qty').value);
+  log(`POST /api/orders {${sku}, ${quantity}}`);
+  $('orderBtn').disabled = true;
+  try {
+    const res = await currentClient().placeOrder(sku, quantity);
+    const d = res?.data ?? {};
+    const view = describeOrderResult(d);
+    showResult('orderResult', view.level, `
+      <b>${view.title}</b>
+      ${view.detail}
+      <div class="kv"><span>订单号</span><span>${d.orderNo ?? '-'}</span></div>
+      <div class="kv"><span>status</span><span>${d.status}</span></div>
+      <div class="kv"><span>reason</span><span>${d.reason}</span></div>
+    `);
+  } catch (err) {
+    const detail = err instanceof ApiError && err.body?.message ? err.body.message : err.message;
+    showResult('orderResult', 'error', `<b>请求失败</b>${detail}`);
+    log(`失败：${detail}`);
+  } finally {
+    $('orderBtn').disabled = false;
+  }
+});
+
+// ---- 故障注入 ----
+async function setChaos(enabled) {
+  log(`POST /api/inventory/chaos?enabled=${enabled}`);
+  try {
+    const res = await currentClient().setChaos(enabled);
+    log(`故障注入 enabled=${res?.data?.enabled}，已注入次数=${res?.data?.tripCount}`);
+    setStatus(enabled ? 'error' : 'ok', enabled ? '故障注入已打开（写接口会 503）' : '故障注入已关闭');
+  } catch (err) {
+    log(`失败：${err.message}`);
+  }
+}
+$('chaosOn').addEventListener('click', () => setChaos(true));
+$('chaosOff').addEventListener('click', () => setChaos(false));
+
+ping();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "microservice-console",
+  "version": "1.0.0",
+  "private": true,
+  "description": "微服务控制台 Android 客户端（Capacitor 打包，调网关）",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "sync": "cap sync android",
+    "postinstall": "node scripts/patch-capacitor-repos.cjs",
+    "build:apk": "bash scripts/build-apk.sh"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  }
+}
