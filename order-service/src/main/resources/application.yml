@@ -1,0 +1,67 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:h2:mem:orders;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ---- 本地兜底值（同时是「配置中心是否生效」的对照组）----
+demo:
+  order:
+    max-quantity-per-order: 1
+  circuitbreaker:
+    inventory:
+      # 本地兜底刻意「几乎不会跳」：连续 100 次失败才评估。
+      # 于是 E2E 里观察到熔断真的打开，就同时证明了配置是从配置中心下发的（那里是 3）。
+      failure-rate-threshold: 50
+      sliding-window-size: 100
+      minimum-number-of-calls: 100
+      wait-duration-in-open-state: 60s
+      permitted-number-of-calls-in-half-open-state: 2
+      time-limiter-timeout: 5s
+  info:
+    config-fingerprint: local-fallback
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    registry-fetch-interval-seconds: 5
+  instance:
+    # 单机 demo：用 localhost 注册。这台机器上 Clash 的 TUN 会拦掉对自己 LAN IP 的回连
+    # （192.168.3.34:8082 直连超时，localhost 正常），注册成 LAN IP 会导致网关路由不通。
+    # 真实多机部署时改为真实主机名/IP。
+    hostname: localhost
+    prefer-ip-address: false
+    instance-id: ${spring.application.name}:${server.port}:localhost
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
+
+# Feign 超时要短，否则熔断验收要等很久才触发
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 800
+        read-timeout: 1500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

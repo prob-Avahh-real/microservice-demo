@@ -1,0 +1,62 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  cloud:
+    gateway:
+      # 注意：Spring Cloud Gateway 5.x 把配置前缀改成了
+      # spring.cloud.gateway.server.webflux.*（已从 jar 内的
+      # spring-configuration-metadata.json 里逐项核对，不是猜的）
+      server:
+        webflux:
+          # 路由是配置驱动的：新增一个服务 = 这里加一段，核心代码不动
+          routes:
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders/**
+              filters:
+                - StripPrefix=1   # /api/orders/xxx -> /orders/xxx
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/inventory/**
+              filters:
+                - StripPrefix=1   # /api/inventory/xxx -> /inventory/xxx
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                # 用 allowed-origin-patterns 而不是 allowed-origins: "*"，
+                # 因为与 allow-credentials 同用时后者会被浏览器拒绝
+                allowed-origin-patterns: "*"
+                allowed-methods: "*"
+                allowed-headers: "*"
+                exposed-headers: "X-Trace-Id"
+                allow-credentials: true
+                max-age: 3600
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    registry-fetch-interval-seconds: 5
+  instance:
+    # 与两个业务服务一致：单机 demo 用 localhost 注册
+    # （本机 Clash TUN 会拦掉对自己 LAN IP 的回连，注册成 LAN IP 网关就路由不通）
+    hostname: localhost
+    prefer-ip-address: false
+    instance-id: ${spring.application.name}:${server.port}:localhost
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info

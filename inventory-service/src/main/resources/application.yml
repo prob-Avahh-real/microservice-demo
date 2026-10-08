@@ -1,0 +1,56 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: inventory-service
+  # optional: 配置中心没起来也能启动（用下面的本地兜底值），起来后会覆盖。
+  # 用 CONFIG_SERVER_URL 环境变量可切换地址。
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:h2:mem:inventory;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ---- 本地兜底值（同时是「配置中心是否生效」的对照组）----
+demo:
+  inventory:
+    low-stock-threshold: 999
+    max-deduct-per-request: 50
+  chaos:
+    delay-millis: 500
+  info:
+    config-fingerprint: local-fallback
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    registry-fetch-interval-seconds: 5
+  instance:
+    # 单机 demo：一律用 localhost 注册，不要用「本机 LAN IP」。
+    # 原因（实测踩到的坑）：这台机器上 Clash 的 TUN 接口会拦掉「连自己 LAN IP」的回连 ——
+    # 192.168.3.34:8082 直连 6s 超时，localhost:8082 正常。
+    # 于是服务若注册成 192.168.3.34，网关就会连不上后端（表现为路由 503 / 连接空响应）。
+    # 真实多机部署时，这里应换成真实主机名或可达 IP。
+    hostname: localhost
+    prefer-ip-address: false
+    instance-id: ${spring.application.name}:${server.port}:localhost
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
