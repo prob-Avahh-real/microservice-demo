@@ -1,0 +1,41 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        // 国内镜像优先：Google Maven（dl.google.com/maven.google.com）直连被墙，
+        // 而 Gradle 自己的 HTTP 客户端走代理会 TLS 握手失败
+        // （"Remote host terminated the handshake"，即便 curl/HttpClient 走同一代理是通的）。
+        // 腾讯 maven-public 聚合了 google + central 且直连可达（实测 0.7s 拉下 androidx aar）。
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        // 官方源留作兜底（在能直连的网络里才会走到）
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.google.gms:google-services:4.4.0'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        // 与 buildscript 同理：镜像优先，官方源兜底
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

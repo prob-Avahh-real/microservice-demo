@@ -50,6 +50,9 @@ Spring Cloud 微服务最小闭环：**服务注册发现 + 统一配置 + API �
 前置：JDK 21、Maven 3.10+。**不需要 Docker。**
 
 ```bash
+# 0. shell 脚本体检（抓 bash 3.2 的多字节变量名坑 + 语法错误）
+bash scripts/lint-sh.sh
+
 # 1. 编译 + 单测
 mvn clean install
 
@@ -107,6 +110,12 @@ curl -X POST -H 'Content-Type: application/json' \
 | `CREATED` | 库存扣减成功 | 正常 | 200 |
 | `REJECTED` | **业务拒绝**：库存不足 / SKU 不存在 / 参数非法 | 上游是健康的，抛异常是错的 | 200 |
 | `DEGRADED` | **技术降级**：上游不可用或熔断已打开 | 由 CircuitBreaker 的 fallback 兜住 | 200 |
+
+**HTTP 状态码约定**（别把两种「拒绝」混在一起）：
+
+- `quantity <= 0` 这类**结构性非法**（`@Min(1)` 校验）→ **HTTP 400** + `code=INVALID_REQUEST`
+- 超出**业务上限**（单笔 > 20，值来自配置中心）→ **HTTP 200** + `status=REJECTED`
+- 结论：400 表示「请求本身不合法」，200 表示「请求合法但业务上不允许」——后者是要写入台账的结果，不是错误
 
 关键点：
 
@@ -185,6 +194,7 @@ curl -X POST -H 'Content-Type: application/json' \
 | 业务服务用 Servlet(Web MVC)，网关用 WebFlux | 网关用响应式是 Spring Cloud Gateway 的经典形态 | 两套编程模型并存 |
 | 熔断用编程式 `CircuitBreakerFactory` | 别名字典式注解的包路径在 Cloud 2025.x 有变动；编程式 API 自 2020 稳定且好单测 | 代码比注解略长 |
 | 故障注入开关只作用于写接口 | 否则打开了就关不掉 | — |
+| Eureka 关自我保护 + 3s 剔除 + 2s 响应缓存刷新 | demo 要「注册/下线立刻可见」，否则排查时容易被 30s 读缓存误导 | 只适合单机 demo，生产必须恢复默认 |
 | 每个 JVM `-Xmx320m` | 这台机器 8GB，5 个默认堆会把机器压垮 | 只适合 demo 负载 |
 
 ---
@@ -197,3 +207,41 @@ curl -X POST -H 'Content-Type: application/json' \
 - 配置不支持热更新（见上表）
 - 没有鉴权，网关对所有来源开放（CORS 允许所有 origin）
 - 观测只有 actuator + 日志，没有接入 Prometheus / 链路追踪后端
+- **Android APK 只验证到「能构建出来 + App 的 API 模块能打通真实链路」**：
+  本机没有连接真机、也没有装模拟器（SDK 里没有 emulator 包与系统镜像），
+  所以「APK 装到设备上点击能用」这一步**未经验证**，需要真机侧载确认
+
+---
+
+## 十、Android 客户端
+
+`mobile/` 是 Capacitor 工程，`mobile/www/` 里的界面经网关调用后端。
+
+```bash
+cd mobile
+npm install
+npm test                     # 8 个纯逻辑单测 + 6 个打真实网关的链路测试
+npm run build:apk            # 产出 android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`npm test` 里的链路测试用的是**App 自己的 API 模块**（`mobile/www/api.js`），
+直接打真实运行的网关 —— 所以它能证明「客户端逻辑 ↔ 网关 ↔ 订单 ↔ 库存」是通的，
+而不仅仅是「APK 能编译」。跑之前需要先 `bash scripts/run-all.sh`；没起服务时测试会明确报错，不会假装通过。
+
+**网关地址**在 App 内可改（默认值按运行环境自动选）：
+
+| 运行环境 | 地址 |
+|----------|------|
+| Android 模拟器 | `http://10.0.2.2:8080`（模拟器里 `10.0.2.2` 才是宿主机的 localhost） |
+| 真机（同一局域网） | `http://<Mac 的局域网 IP>:8080` |
+
+> 注意：本机因为 Clash 的 TUN 接口，服务注册用 `localhost`（见 PROJECT_NOTES 踩坑 11），
+> 但网关本身监听 `0.0.0.0:8080`，所以真机仍然可以通过局域网 IP 访问网关。
+> 真机能不能连上取决于 macOS 防火墙与 Clash 的分流规则，未在本机验证。
+
+构建环境（已固化在 `mobile/scripts/build-apk.sh` 与 `android/gradle.properties` 里）：
+
+- JDK **21**（AGP 8.2.1 不支持 JDK 24/27）
+- Android SDK 在 `/opt/homebrew/share/android-commandlinetools`（**不是** `~/Library/Android/sdk`）
+- `google()` 仓库要走 Clash 代理（`127.0.0.1:7897`），直连不通
+- Capacitor 6.2.2 → AGP 8.2.1 / Gradle 8.2.1 / compileSdk 34

@@ -92,6 +92,41 @@
     —— 教训：断言「读数错了但看着通过」比直接失败更危险。
 22. 断言里的字符串比较要注意 Eureka 应用名是**大写**（`INVENTORY-SERVICE`），
     用 `tr '[:lower:]' '[:upper:]'` 统一后再比，否则误报「注册表里缺服务」。
+23. 坑 20（bash 3.2 多字节变量名）**出现第二次**后，按本仓库棘轮规则不再靠文档提醒，
+    而是做成 **Sensor**：`scripts/lint-sh.sh` —— 扫全部 `*.sh`，同时跑 `bash -n`，
+    一旦有 `$var` 紧跟中文字符就报错并给出应改成 `${var}` 的位置。
+    加完立刻在 `mobile/scripts/build-apk.sh` 里又抓出 2 处（错误分支上的 `$SDK_DIR（`、`$status）`）。
+    → **教训：同一种失误出现第二次，就补传感器，不是再写一条注意事项。**
+24. 用 `node --test` 时别传目录：`node --test test/` 在 Node 22 会被当成模块路径而报
+    `Cannot find module`。用 shell 展开的通配：`node --test test/*.test.js`。
+25. 「业务拒绝」与「请求非法」的 HTTP 语义要分清，否则测试会写错断言：
+    - `quantity <= 0`（`@Min(1)` 校验失败）→ **400** + `code=INVALID_REQUEST`
+    - 超出业务上限（`> 20`，来自配置中心）→ **200** + `status=REJECTED`
+    我最初在 App 链路测试里把后者也断言成 400，结果 `Missing expected rejection` 失败 —— 是断言错，不是代码错。
+26. **Eureka 的 `/eureka/apps` 是「读缓存快照」，默认每 30s 才刷新一次**
+    （`eureka.server.response-cache-update-interval-ms`）。于是会出现：
+    **服务注册明明成功（日志里 `registration status: 204`、进程也活着），但注册表里暂时查不到** ——
+    这让我卡了很久：网关注册成功了、路由也全通（第 1–7 条断言都过了），
+    只有「注册表里应该有 3 个」这一条随机失败。
+    正确处理有两层：
+    ① demo 里把 `response-cache-update-interval-ms` 调到 **2000**，让注册表接近实时；
+    ② 更重要的是**断言要轮询**（e2e 第 8 条改成最多轮询 30s）——
+       注册表收敛本来就是最终一致，**对最终一致的读路径拍单张快照，本身就是错误的测试写法**。
+    → 教训：断言失败时先问「是不是我把最终一致的东西当成强一致的读了」。
+27. **Gradle 自己的 HTTP 客户端走 Clash 代理会 TLS 握手失败**
+    （`Remote host terminated the handshake`），而 curl 与 JDK 的 `HttpClient`
+    走同一个代理都正常（实测 200）→ 说明是 Gradle 客户端的问题，不是代理坏了。
+    应对：
+    ① Maven Central / Gradle 服务直连就通 → 放进 `http.nonProxyHosts` 绕开代理；
+    ② **Google Maven 直连被墙** → 改用直连可达的国内镜像
+       （腾讯 `mirrors.cloud.tencent.com/nexus/repository/maven-public` 最快，0.7s；阿里次之）；
+    ③ Capacitor 自带子工程（`node_modules/@capacitor/android/capacitor/build.gradle` 与
+       `capacitor-cordova-android-plugins/build.gradle`）**各自带 buildscript{ repositories{ google() } }**，
+       根 `build.gradle` 的镜像影响不到它 → 必须用 `mobile/scripts/patch-capacitor-repos.cjs`
+       把镜像插到**列表最前面**。注意超时是「失败」而不是「找不到」，
+       Gradle **不会**顺延到下一个仓库，所以顺序必须是镜像在前。
+28. Android 构建的 JDK 必须钉在 **21**：AGP 8.2.1 不支持 JDK 24/27，
+    而 `brew install maven` 顺带装的 openjdk 是 27（`mvn -v` 显示 Java 27）。
 
 ---
 
@@ -124,8 +159,20 @@
 
 ### M4 · Android 客户端（Capacitor）
 - **交付物：** `mobile/` Capacitor 工程 + `android/`，产出 `app-debug.apk`
-- **验收：** `gradlew assembleDebug` 出 APK；网关地址可配置
-- **状态：** ⬜ 未开始（依赖 M3 通过）
+- **验收：** ① `npm test` 全绿（含打真实网关的链路测试）② `gradlew assembleDebug` 出 APK
+- **状态：** ✅ **完成**
+  - ✅ `mobile/test` **14/14 全绿**（8 项纯逻辑单测 + 6 项打真实运行中网关的链路测试，含熔断降级断言）
+  - ✅ `assembleDebug` **BUILD SUCCESSFUL** → `app-debug.apk` **3.6M**
+    sha256 `dbea648d15097532b07a0cc2a7876210cda1769ff5b17a75ebfcba2a6e93f014`
+  - ✅ `mobile/scripts/verify-apk.sh` 用 `aapt2 dump badging` **真正解析**了 APK：
+    包名 `com.demo.microservice`、minSdk 22 / targetSdk 34；并确认 `assets/public/index.html`
+    与 `api.js` 都在包里、index.html 确实 `import './api.js'` 且含模拟器网关地址 `10.0.2.2`
+    （不是「文件存在就算成功」）
+  - ⚠️ **仍未被验证的部分（如实声明）**：本机无真机、无模拟器（SDK 只装了 platform-34，
+    没有 emulator 包与系统镜像），**「APK 装到设备上点击可用」未经任何验证**。
+    本里程碑的 Done 判据因此定义为：
+    **APK 能构建 + 产物内容正确 + App 客户端逻辑经真实网关验证通过**；
+    设备端运行不在本机 Done 判据内，README 已显式声明。
 
 ---
 

@@ -151,22 +151,32 @@ sleep 11
 banner "8. 注册中心里三个服务都在"
 # 用 JSON API 而不是 grep XML：XML 里 dataCenterInfo 也带一个 <name>MyOwn</name>
 # （它表示 "my own datacenter"，不是应用名），用正则抓 <name> 会把它当成第 4 个应用。
-# 这类「看起来通过、其实读数错」的断言最危险，所以改成走 JSON 只取真正的应用名。
-apps_raw="$(curl -s --max-time 5 -H 'Accept: application/json' "$EUREKA/eureka/apps" \
-  | python3 -c "
+#
+# 而且要**轮询**，不能只拍一张快照：Eureka 的 /eureka/apps 是读缓存快照
+# （server 端 response-cache-update-interval-ms，本工程 demo 调到 2s），
+# 注册表收敛是最终一致 —— 刚注册完立刻查可能看不到，单次断言会随机假失败。
+apps_raw=""
+count=0
+for _ in $(seq 1 15); do
+  apps_raw="$(curl -s --max-time 5 -H 'Accept: application/json' "$EUREKA/eureka/apps" \
+    | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 print(' '.join(a['name'] for a in d.get('applications', {}).get('application', [])))
 " 2>/dev/null)"
-apps_upper="$(printf '%s' "$apps_raw" | tr '[:lower:]' '[:upper:]')"
-count=0
-for s in INVENTORY-SERVICE ORDER-SERVICE API-GATEWAY; do
-  [[ "$apps_upper" == *"$s"* ]] && count=$((count + 1))
+  apps_upper="$(printf '%s' "$apps_raw" | tr '[:lower:]' '[:upper:]')"
+  count=0
+  for s in INVENTORY-SERVICE ORDER-SERVICE API-GATEWAY; do
+    [[ "$apps_upper" == *"$s"* ]] && count=$((count + 1))
+  done
+  [[ "$count" == "3" ]] && break
+  sleep 2
 done
+
 if [[ "$count" == "3" ]]; then
   pass "Eureka 注册表：$apps_raw"
 else
-  fail "注册表里缺服务（只找到 $count/3）" "注册表内容：$apps_raw"
+  fail "轮询 30s 后注册表里仍缺服务（只找到 $count/3）" "注册表内容：$apps_raw"
 fi
 
 # ---------------------------------------------------------------- 汇总

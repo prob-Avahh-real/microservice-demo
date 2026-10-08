@@ -18,6 +18,11 @@ eureka:
     # demo 环境关掉自我保护：服务下线后立刻从注册表消失，避免「假活」误导验收
     enable-self-preservation: false
     eviction-interval-timer-in-ms: 3000
+    # 关键：Eureka 对外提供的 /eureka/apps 是**读缓存快照**，默认每 30s 才刷新一次。
+    # 于是「服务已注册成功（204）但注册表里暂时查不到」是正常现象，
+    # 会让「注册表里应该有 3 个服务」这类断言随机失败（本工程实际踩过，排查了很久）。
+    # demo 里调到 2s，让注册表接近实时；生产不需要这么激进。
+    response-cache-update-interval-ms: 2000
 
 management:
   endpoints:
