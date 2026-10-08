@@ -243,6 +243,12 @@ cd mobile && npm ci && npm test && npm run build:apk && bash scripts/verify-apk.
 > 详见 CHANGELOG 的 Fixed 小节。两者都只有换机器才会现形 —— 本机「干净检出」验证抓不到，
 > 现在由 `scripts/lint-sh.sh` 的第 3 项检查守着。
 
+**如何触发 CD**：打 tag 即触发 `release` job，把 5 个 jar 与 APK 附到 GitHub Release。
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
 **设计取舍**
 
 - **不引 Docker / Testcontainers**：本工程零外部中间件（H2 内存库），runner 上直接起 5 个 JVM
