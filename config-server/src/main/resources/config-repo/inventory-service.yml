@@ -1,0 +1,9 @@
+# inventory-service 专属配置（由 config-server 下发）
+demo:
+  inventory:
+    # 低于该值即标记 lowStock=true。
+    # 本地 application.yml 的兜底值是 999（=永不告警），这里故意给 5，
+    # 于是「PEAR 库存 3 → lowStock=true」只有在配置真的从配置中心拿到时才成立。
+    low-stock-threshold: 5
+    # 单次扣减上限，防止一个请求把库存一次抽干
+    max-deduct-per-request: 50

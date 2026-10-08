@@ -1,0 +1,34 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # 单机注册中心：自己不注册、也不去拉别的注册表
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # demo 环境关掉自我保护：服务下线后立刻从注册表消失，避免「假活」误导验收
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.netflix.eureka: warn
+    com.netflix.discovery: warn

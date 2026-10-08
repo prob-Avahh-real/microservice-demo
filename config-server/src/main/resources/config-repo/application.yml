@@ -1,0 +1,20 @@
+# 全服务共享配置（config-server 会把它叠加到每个 client 上）
+demo:
+  info:
+    owner: microservice-demo
+    # 这个值只存在于配置中心。各服务本地 application.yml 里是 0000-00-00，
+    # 用于让 E2E 判断「配置到底有没有真的从配置中心下发」。
+    config-fingerprint: from-config-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{28} - %msg%n"

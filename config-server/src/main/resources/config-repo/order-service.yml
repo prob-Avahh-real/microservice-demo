@@ -1,0 +1,15 @@
+# order-service 专属配置（由 config-server 下发）
+demo:
+  order:
+    # 单笔订单数量上限。本地兜底 1，配置中心给 20 —— E2E 用「下单 15 件」来反证配置生效。
+    max-quantity-per-order: 20
+  # 熔断器参数：被 Resilience4jTuning 这个 Customizer 真正读取并接到 Resilience4j 上
+  circuitbreaker:
+    inventory:
+      failure-rate-threshold: 50
+      sliding-window-size: 6
+      # 关键：连续 3 次失败就评估。本地兜底是 100，所以「熔断器真的跳了」= 配置真的下发了
+      minimum-number-of-calls: 3
+      wait-duration-in-open-state: 10s
+      permitted-number-of-calls-in-half-open-state: 2
+      time-limiter-timeout: 5s
