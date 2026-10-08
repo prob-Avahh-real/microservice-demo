@@ -1,5 +1,7 @@
 # microservice-demo
 
+[![CI](https://github.com/prob-Avahh-real/microservice-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/prob-Avahh-real/microservice-demo/actions/workflows/ci.yml)
+
 Spring Cloud 微服务最小闭环：**服务注册发现 + 统一配置 + API 网关 + 服务间调用 + 熔断降级**，
 外加一个 Capacitor 打包的 Android 客户端用于验证链路。
 
@@ -233,6 +235,14 @@ bash scripts/e2e.sh
 cd mobile && npm ci && npm test && npm run build:apk && bash scripts/verify-apk.sh
 ```
 
+**实测结果**（run [#37857792070](https://github.com/prob-Avahh-real/microservice-demo/actions/runs/37857792070)）：
+`backend` / `mobile-unit` / `android` 三个 job 全部 **success**；产物 `service-jars`（305MB，5 个 fat jar）
+与 `app-debug-apk`（3.37MB）。CD 的 `release` job 按设计在无 tag 时跳过。
+
+> CI 首轮曾暴露**两个「本机假设」缺陷**（`gradle-wrapper.jar` 从未进仓库；受控配置里写死本机 JDK 路径），
+> 详见 CHANGELOG 的 Fixed 小节。两者都只有换机器才会现形 —— 本机「干净检出」验证抓不到，
+> 现在由 `scripts/lint-sh.sh` 的第 3 项检查守着。
+
 **设计取舍**
 
 - **不引 Docker / Testcontainers**：本工程零外部中间件（H2 内存库），runner 上直接起 5 个 JVM
@@ -291,3 +301,8 @@ npm run build:apk            # 产出 android/app/build/outputs/apk/debug/app-de
 - 依赖仓库：**国内镜像优先（腾讯/阿里）+ 官方源兜底，不用代理**
   （`maven.google.com` / `dl.google.com` 直连被墙，而 Gradle 走 Clash 代理会 TLS 握手失败）
 - Capacitor 6.2.2 → AGP 8.2.1 / Gradle 8.2.1 / compileSdk 34
+
+> **构建可复现性（实测）**：同一台机器上，「干净检出」（`git archive` 解出）构建出的 APK
+> 与工作区构建的 **sha256 完全一致**。跨机器（macOS → Linux CI）后：
+> APK 内 30515 字节的条目清单**逐条 CRC 完全相同**，唯一差异是 `META-INF/CERT.RSA` ——
+> debug 签名证书来自各机器自己的 `~/.android/debug.keystore`，属签名身份差异，不是构建差异。

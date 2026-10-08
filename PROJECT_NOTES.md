@@ -184,6 +184,10 @@
 **CI**：`.github/workflows/ci.yml` 的 `backend` / `mobile-unit` / `android` 三个 job 全绿
 （= 上面那套命令在一台干净的 runner 上同样通过）。
 
+**状态**：✅ 已验证 —— run `37857792070` 三个 job 全 **success**，产物
+`service-jars`（305MB）+ `app-debug-apk`（3.37MB）。
+CD 的 `release` job 按设计需打 tag 才触发，尚未执行（打 tag 后会把 jar 与 APK 附到 GitHub Release）。
+
 任一条未达成即视为未完成，不允许「看着还行」。
 
 ## 停止条件

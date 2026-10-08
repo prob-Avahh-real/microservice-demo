@@ -44,7 +44,8 @@
 - 失败时上传 `.run/logs/` 与 `.run/e2e.log`；成功上传 5 个 jar 与 APK 作为可下载产物
 - `scripts/stop-all.sh` 增加 lsof 缺失时的兜底（Linux runner 通常没装 lsof，原来会直接失效）
 - `mobile/package.json` 拆出 `test:unit` / `test:live`，让纯逻辑单测无需后端即可并行跑
-- 工作流经 `actionlint` 校验（0 问题）
+- 工作流经 `actionlint` 校验（0 问题）；已在 GitHub Actions 上**实际跑通**：
+  `backend` / `mobile-unit` / `android` 三个 job 全 success，产物 `service-jars`(305MB) 与 `app-debug-apk`(3.37MB)
 
 ### Fixed（CI 首次真实运行暴露的两个「本机假设」）
 
