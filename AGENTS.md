@@ -91,6 +91,7 @@ bash mobile/scripts/verify-apk.sh   # 用 aapt2 真解析 APK + 校验包内 web
 | Android 构建配置 | `npm run build:apk` + `scripts/verify-apk.sh` |
 | `.github/workflows/**` 改动 | `actionlint`（本机已装；CI 只做 YAML 校验，写错不会立刻失败） |
 | **push / 提 PR 前** | 上面相关项全部 = CI 跑的同一套命令；本地绿才推（本地绿 = CI 绿） |
+| **push 前先看 CI 在不在跑** | `scripts/ci-guard.sh`（已由 `scripts/setup-git-hooks.sh` 挂成 pre-push 钩子）。CI 在跑就先等 `gh run watch <id> --exit-status` 完再推 —— 别把上一次正在验证的运行掐掉。确实要现在推（接受排队/取消）：`SKIP_CI_GUARD=1 git push` |
 
 **停止条件**：① 成功；② 同一模块连续失败 3 次即停下重估方案（不要继续堆补丁）；
 ③ 要改版本基准 / 验收标准 / 引入外部中间件 → 先问用户。
