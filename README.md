@@ -232,6 +232,15 @@ curl -X POST -H 'Content-Type: application/json' \
 **Windows 那一格只承诺「编译 + 单测通过」**，不写成「跳过但看起来成功」。
 （Android job 固定在 ubuntu：只有 ubuntu runner 预装 Android SDK。）
 
+这个矩阵不是形式主义：它**第一次运行就抓到一个只在 Windows 现形的真缺陷** ——
+`lint-sh.sh` 里的 Python 打印中文/`✔` 时，Windows 的 Python 默认输出编码是 cp1252，
+直接抛 `UnicodeEncodeError`（同一提交上 ubuntu 与 macOS 全绿，含完整 8 项端到端）。
+已修：脚本内强制 `PYTHONIOENCODING=utf-8`，并把写死的 `python3` 改成可发现。
+
+`android` job **不依赖** backend 矩阵：它自行构建 jar + 自跑服务，结果独立，
+免得 Windows 上与本 job 无关的问题把 APK 产出一起 skip 掉；
+「全平台绿才发布」的门禁放在 `release` 的 `needs` 上。
+
 **产物瘦身**：不再每次 CI 上传 `service-jars`。5 个 Spring Boot fat jar 合计 **~327MB**
 （单个 43–85MB），跨 job 传它只为让 android job 起服务，不划算；
 改为 job 内 `mvn -DskipTests package`（Maven 依赖由 `setup-java` 的 cache 复用，只几十秒）。

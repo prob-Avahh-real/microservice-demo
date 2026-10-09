@@ -30,6 +30,9 @@ banner() { printf '\n\033[36m── %s\033[0m\n' "$1"; }
 
 # python 解释器：本工程在 macOS / Ubuntu 上跑；不写死 python3 以保持一致
 PY_BIN="$(command -v python3 || command -v python || true)"
+# Windows 控制台默认 cp1252，Python 打印中文会 UnicodeEncodeError → 强制 UTF-8 输出
+export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
 
 val() { printf '%s' "$1" | "$PY_BIN" "$ROOT/scripts/jsonq.py" "$2" 2>/dev/null; }
 

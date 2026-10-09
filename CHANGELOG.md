@@ -65,6 +65,18 @@
   → `scripts/lint-sh.sh` 增加第 3 项检查：受版本控制的配置类文件（properties / gradle / xml / yml / json …）
   不得出现 `/opt/homebrew` 或 `/Users/` 绝对路径（并做过反向测试，确认它会报警）
 
+### Fixed（CI 矩阵首次运行暴露的第三个「跨平台假设」）
+
+- **Windows 上 Python 输出编码炸掉**：`lint-sh.sh` 里的 Python 要打印中文与 `✔`，
+  而 Windows 的 Python 默认输出编码是 **cp1252** → 直接抛 `UnicodeEncodeError`（不是输出难看，是报错退出）。
+  已修：脚本内 `export PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`；同时把写死的 `python3`
+  改成可发现（`command -v python3 || command -v python`，Git Bash 里通常只有 `python`）。
+  → **这个 OS 矩阵不是形式主义**：它第一次运行就抓到了这个只在 Windows 现形的真缺陷
+  （同一提交上 ubuntu 与 macOS 都是绿的，含完整 8 项端到端）。
+- **`android` job 不再 `needs: backend`**：它自带一切（自行构建 jar + 起服务自测），
+  却因为矩阵里 Windows 那一格失败而被 `skipped`，把 APK 产出一起拖住了。
+  改为独立 job，让它只反映自身结果；「全平台都绿才允许发布」的门禁放在 `release` 的 `needs` 上。
+
 ### Tests
 
 - 后端 **22 项通过**：inventory 10（6 纯逻辑单测 + 4 HTTP 集成）、order 10（6 + 4）、gateway 2（路由加载断言）

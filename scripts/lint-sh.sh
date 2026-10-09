@@ -29,6 +29,12 @@ if [[ -z "$PY_BIN" ]]; then
   exit 2
 fi
 
+# Windows 的控制台默认编码是 cp1252，Python 打印中文或 ✔ 会抛 UnicodeEncodeError
+# （不是「输出难看」，是直接报错退出）—— 实测在 windows-latest 矩阵上挂过一次。
+# 强制 UTF-8 输出：CI 日志按 UTF-8 解码，显示正常。
+export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
+
 echo "── 1. 语法检查 (bash -n) ────────────────────────────────"
 while IFS= read -r f; do
   if ! bash -n "$f" 2>/tmp/lint-sh.err; then

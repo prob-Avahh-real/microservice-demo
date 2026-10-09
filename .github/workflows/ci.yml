@@ -116,7 +116,9 @@ jobs:
   android:
     name: Android 客户端（链路测试 + APK）
     runs-on: ubuntu-latest
-    needs: backend
+    # 刻意**不**依赖 backend 矩阵：本 job 自带硬件（自行构建 jar + 自跑端到端所需的服务），
+    # 让它的结果独立出来 —— 否则 Windows 上一个与本 job 无关的问题会把 APK 产出一起 skip 掉。
+    # 需要「全平台都绿才允许发布」的门禁放在 release job 的 needs 上。
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
