@@ -70,22 +70,24 @@ fi
 OUT="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/ci-guard.$$")"
 trap 'rm -f "$OUT"' EXIT
 
-list_runs() {   # $1 = 分支；输出 "id<TAB>status<TAB>title"；超时/失败返回非 0
+list_runs() {   # $1 = 分支；输出该分支上**未结束**的 run；超时/失败返回非 0
   local b="$1"
-  # 整段放进子 shell 并关掉它的 stderr：
-  # 看门狗 kill 掉 gh 时 bash 会打一句 "Terminated: 15" —— 它会污染 push 输出，
-  # 而守卫放行时应当安静（钩子的老规矩：没事别出声）。
+  # 整段放进子 shell 并关掉它的 stderr：看门狗 kill 掉 gh 时 bash 会打一句
+  # "Terminated: 15"，会污染 push 输出；而守卫放行时应当安静。
   #
-  # ⚠ 不能加 `gh run list --branch <b>`：那是**服务端 filter**，对刚启动的 run
-  #   会因为索引延迟而查不到（实测：一次 push 后 12s 用 --branch 查不到在跑的 run，
-  #   守卫于是静默放行 —— 最需要拦的时候正好漏掉）。
-  #   改为只按 status 查，再**本地**用 headBranch 匹配：headBranch 字段本身是即时可用的。
+  # ⚠⚠ 服务端过滤两个都别用（都实测踩过，且都**不报错**）：
+  #   1. `--status a --status b`：gh 的 --status 是**单值**标志，重复给只会用**最后一个**。
+  #      写成 `--status in_progress --status queued --status pending --status waiting`
+  #      实际等价于 `--status waiting` → 永远查不到东西 → 守卫静默放行、
+  #      **看着在工作其实从不拦截**。这是最坏的失败方式：不会响的传感器。
+  #   2. 所以就取最近 50 条，在**本地**按 headBranch 匹配 + status != completed
+  #      判断「还没结束」（in_progress / queued / pending / waiting / requested 都算）。
+  # 教训：过滤条件是**静默**生效的 —— 写完必须拿一次真正在跑的 run 试，别靠读代码。
   (
     gh run list \
-        --status in_progress --status queued --status pending --status waiting \
         --limit 50 \
         --json databaseId,status,headBranch,displayTitle \
-        -q ".[] | select(.headBranch == \"$b\") | \"\(.databaseId)\t\(.status)\t\(.displayTitle)\"" \
+        -q ".[] | select(.headBranch == \"$b\") | select(.status != \"completed\") | \"\(.databaseId)\t\(.status)\t\(.displayTitle)\"" \
         >"$OUT" 2>/dev/null &
     ghpid=$!
     ( sleep "${CI_GUARD_TIMEOUT:-15}"; kill "$ghpid" 2>/dev/null ) >/dev/null 2>&1 &
