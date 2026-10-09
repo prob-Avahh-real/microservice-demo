@@ -184,10 +184,9 @@
 **CI**：`.github/workflows/ci.yml` 的 `backend`（OS 矩阵 ×3）/ `mobile-unit` / `android` 全绿
 （= 上面那套命令在一台干净的 runner 上同样通过；端到端只在 Linux/macOS 验，Windows 只验编译+单测）。
 
-**状态**：✅ 已验证 —— run `37857792070` / `37858399109` 全 **success**。
-（那次运行还上传了 `service-jars`（305MB，即 5 个 fat jar 合计约 327MB）；
-现已在流水线里取消该产物，改为 job 内自行构建，日常 CI 产物只剩 APK ≈3.4MB。）
-CD 的 `release` job 按设计需打 tag 才触发，尚未执行（打 tag 后会把 jar 与 APK 附到 GitHub Release）。
+**状态**：✅ 已验证 —— 分支运行 `37867955824` 五个 job 全 **success**；
+tag 运行 `37868410239` 全 success 并发布 [Release v1.0.0](https://github.com/prob-Avahh-real/microservice-demo/releases/tag/v1.0.0)（7 个资产）。
+产物已瘦身：日常 CI 只剩 APK ≈3.4MB（原先 305MB 的 `service-jars` 已取消），jar 改由 Release 提供。
 
 任一条未达成即视为未完成，不允许「看着还行」。
 

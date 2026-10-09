@@ -77,6 +77,16 @@
   却因为矩阵里 Windows 那一格失败而被 `skipped`，把 APK 产出一起拖住了。
   改为独立 job，让它只反映自身结果；「全平台都绿才允许发布」的门禁放在 `release` 的 `needs` 上。
 
+### Fixed（执行 CD 时暴露的第四个缺陷）
+
+- **推 tag 不触发流水线**：`on.push` 只写了 `branches: [main, master]`，而 tag 推送不匹配 `branches`，
+  于是 `release` job 的 `if: startsWith(github.ref, 'refs/tags/')` **永远为假** —— CD 等于没接上。
+  已修：显式加 `tags: ['v*']`。
+  → 这类问题只有**真的执行一次 CD**（打一次 tag）才会现形，配置写完不等于接通。
+- **CD 已验证**：`v1.0.0` 的 tag 运行全 success 并发布了 Release，
+  附 5 个服务 jar + `common` + `app-debug.apk`（共 7 个资产）；
+  APK 已从 Release 下载回来用 `aapt2 dump badging` 独立复核（包名 `com.demo.microservice`，web 资源齐全）。
+
 ### Tests
 
 - 后端 **22 项通过**：inventory 10（6 纯逻辑单测 + 4 HTTP 集成）、order 10（6 + 4）、gateway 2（路由加载断言）

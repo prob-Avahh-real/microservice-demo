@@ -255,9 +255,13 @@ bash scripts/e2e.sh
 cd mobile && npm ci && npm test && npm run build:apk && bash scripts/verify-apk.sh
 ```
 
-**实测结果**（run [#37857792070](https://github.com/prob-Avahh-real/microservice-demo/actions/runs/37857792070)）：
-`backend` / `mobile-unit` / `android` 三个 job 全部 **success**；产物 `service-jars`（305MB，5 个 fat jar）
-与 `app-debug-apk`（3.37MB）。CD 的 `release` job 按设计在无 tag 时跳过。
+**实测结果**：
+
+- 分支运行 [#37867955824](https://github.com/prob-Avahh-real/microservice-demo/actions/runs/37867955824)：
+  **5 个 job 全 success**（矩阵 ×3 + 客户端单测 + Android/APK），产物只剩 `app-debug-apk`（3.37MB）
+- tag 运行 [#37868410239](https://github.com/prob-Avahh-real/microservice-demo/actions/runs/37868410239)：
+  全 success，并发布了 [Release v1.0.0](https://github.com/prob-Avahh-real/microservice-demo/releases/tag/v1.0.0)
+  —— **7 个资产**（5 个服务 jar + `common` + `app-debug.apk`），其中 APK 已下载回来用 `aapt2` 独立复核
 
 > CI 首轮曾暴露**两个「本机假设」缺陷**（`gradle-wrapper.jar` 从未进仓库；受控配置里写死本机 JDK 路径），
 > 详见 CHANGELOG 的 Fixed 小节。两者都只有换机器才会现形 —— 本机「干净检出」验证抓不到，
