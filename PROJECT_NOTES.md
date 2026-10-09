@@ -128,6 +128,41 @@
 28. Android 构建的 JDK 必须钉在 **21**：AGP 8.2.1 不支持 JDK 24/27，
     而 `brew install maven` 顺带装的 openjdk 是 27（`mvn -v` 显示 Java 27）。
 
+### D. CI / CD 类（全都是「本机怎么测都测不出来」的）
+
+29. **CI 首轮暴露两个「本机假设」** —— 本机「干净检出」验证抓不到，只有换机器才现形：
+    ① `.gitignore` 的 `*.jar` 误伤 `gradle-wrapper.jar` → runner 上
+       `Could not find or load main class org.gradle.wrapper.GradleWrapperMain`；
+    ② `mobile/android/gradle.properties` 里写死了 `/opt/homebrew/opt/openjdk@21/...`，
+       runner 上报 `Value ... is invalid`。
+    修法：① 加 `!**/gradle/wrapper/gradle-wrapper.jar`；② 删掉那行、改由 `build-apk.sh` 注入，
+    并把它做成 **Sensor**（`lint-sh.sh` 第 3 项：受控文件不得出现 `/opt/homebrew` 或 `/Users/`，
+    做过反向测试确认会响）。
+30. **Windows 矩阵抓到的 cp1252 编码缺陷**：`lint-sh.sh` 里的 Python 打印中文与 `✔`，
+    而 Windows 的 Python 默认输出编码是 **cp1252** → 直接抛 `UnicodeEncodeError`
+    （是**报错退出**，不是「输出难看」）。修：脚本内 `export PYTHONIOENCODING=utf-8`
+    + `PYTHONUTF8=1`，`python3` 改成可发现（Git Bash 里通常只有 `python`）。
+    本机复现（不需要 Windows 机器）：`PYTHONIOENCODING=cp1252 python3 -c "print('✔')"`。
+    → 加 OS 矩阵不是形式主义：它**首跑就抓到**这个只在 Windows 现形的真缺陷。
+31. **推 tag 不触发流水线**：`on.push` 只写了 `branches: [main, master]`，而 tag 推送不匹配
+    `branches` → 流水线根本不启动，`release` job 里 `if: startsWith(github.ref,'refs/tags/')`
+    成了**死代码**（CD 等于没接上，且不报错）。必须显式写 `tags: ['v*']`。
+    → 教训：**「配置了 CD」≠「CD 能跑」**；远端触发的路径必须真触发一次，
+    再用 `gh release view --json assets` 核对产物真的挂上去了。
+32. **concurrency 会把正在跑的运行掐掉**：我推了一个纯文档提交，结果把上一次
+    **完整验证的 run 取消了**，只能重跑（这次也顺带发现 `android` job 因
+    `needs: backend` 矩阵被连带 skip）。
+    两手修，缺一不可：
+    ① **平台侧兜底**：`cancel-in-progress` 改成条件式（仅 PR 取消），
+       主分支的新推送改为**排队** —— `group` 仍保证同 ref 串行；
+    ② **本地侧预防**：`.githooks/pre-push` → `scripts/ci-guard.sh`，CI 在跑就拦住 push，
+       并列出在跑的 run 与 `gh run watch` 命令；逃生口 `SKIP_CI_GUARD=1`。
+    → 教训：**「取消」是事后兜底，「不许推」才是预防**；只做兜底时损失已经发生。
+    实现细节坑：守卫看门狗 kill 掉 `gh` 时 bash 会打一句 `Terminated: 15` 污染 push 输出
+    → 把探测整个放进子 shell 并把子 shell 的 stderr 关掉（`( ... ) 2>/dev/null`）。
+    另外守卫要**失败开放**（gh 缺失/未登录/断网/超时只提示不拦）：
+    一个会因为工具故障挡住正常推送的守卫，比没有守卫更糟。
+
 ---
 
 ## 里程碑
