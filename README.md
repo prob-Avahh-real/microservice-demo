@@ -241,6 +241,32 @@ curl -X POST -H 'Content-Type: application/json' \
 免得 Windows 上与本 job 无关的问题把 APK 产出一起 skip 掉；
 「全平台绿才发布」的门禁放在 `release` 的 `needs` 上。
 
+### 关于 concurrency：保留，但不再掐掉主分支上正在跑的运行
+
+`concurrency` 组按 ref 串行（不并行抢资源）保留；但 `cancel-in-progress` 改成**条件式**
+（`${{ github.event_name == 'pull_request' }}`）：PR 上的高频推送该取消就取消，
+**主分支**上的新推送改为**排队**。起因是推一个纯文档提交把正在跑的完整验证 run 取消了。
+
+平台侧只是兜底，真正的**预防**在本地：
+
+```bash
+bash scripts/setup-git-hooks.sh     # 每个克隆做一次：git config core.hooksPath .githooks
+```
+
+之后 CI 在跑时 `git push` 会被 `scripts/ci-guard.sh` 拦下，并列出在跑的 run 与等待命令：
+
+```
+✘ CI 守卫：master 上还有 1 个运行没结束，先别推 ——
+    #37868868719  in_progress  docs: ...
+  等它跑完：   gh run watch <上面的 #id> --exit-status
+  确实要现在推：SKIP_CI_GUARD=1 git push ...
+```
+
+设计取舍：**失败开放** —— gh 缺失 / 未登录 / 断网 / 超时只提示、不拦。
+一个会因为工具故障就挡住正常推送的守卫，比没有守卫更糟。只推 tag 时直接放行
+（tag 有自己的 concurrency 组，不会取消分支运行）。
+仓库体检的第 4 项会检查这个守卫还在、且 `ci.yml` 里没被「顺手简化」回无条件取消。
+
 **产物瘦身**：不再每次 CI 上传 `service-jars`。5 个 Spring Boot fat jar 合计 **~327MB**
 （单个 43–85MB），跨 job 传它只为让 android job 起服务，不划算；
 改为 job 内 `mvn -DskipTests package`（Maven 依赖由 `setup-java` 的 cache 复用，只几十秒）。

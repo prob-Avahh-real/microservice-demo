@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────
+# CI 预推送守卫：CI 正在跑的时候，别再推后续提交。
+#
+# 为什么需要它
+#   流水线的 concurrency 组是按 ref 的：同一分支上的新推送会让上一次运行
+#   被取消（cancel-in-progress）或排队。想看完整结果，就别在飞行中推第二次。
+#
+#   这是「两条腿」里的**本地预防**那条，平台侧的 concurrency 是**兜底**那条：
+#     本地守卫  ←  拦住「我知道在跑，还要推」这种有意/疏忽的推送
+#     平台 concurrency  ←  拦住 PR 上的高频推送（那种取消是应该的）
+#   只有平台侧：你会在 CI 跑着时推文档提交，把上一次真正的验证运行取消掉。
+#   只有本地侧：别人/别的机器（没装钩子）照样能推爆。
+#
+# 用法
+#   作为 git pre-push 钩子的后端（由 .githooks/pre-push 调用，git 经 stdin 传 refs）；
+#   也可以单独跑：
+#     bash scripts/ci-guard.sh
+#
+# 逃生口（确实要现在推、接受上一次运行被取消/排队）：
+#   SKIP_CI_GUARD=1 git push ...
+#
+# 设计取舍：**失败开放（fail-open）**
+#   gh 缺失 / 未登录 / 断网 / 超时 → 只提示、不拦。
+#   一个会因为工具故障就挡住正常推送的守卫，比没有守卫更糟。
+# ─────────────────────────────────────────────────────────────────────
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [[ -n "${SKIP_CI_GUARD:-}" ]]; then
+  echo "⚠ CI 守卫：SKIP_CI_GUARD 已设置，跳过检查（上一次运行可能被取消/排队）"
+  exit 0
+fi
+
+# ── 只守「推分支」。推 tag 有自己的 concurrency 组，不会取消分支运行 ──
+# pre-push 从 stdin 收到若干行：<local ref> <local sha> <remote ref> <remote sha>
+# 三种输入要分开对待：
+#   (1) 钩子调用：stdin 有 refs → 只看 refs/heads/*，一条都没有 = 只推 tag = 放行
+#   (2) 手动跑且 stdin 是管道/空文件：没有 refs → 退回当前分支
+#   (3) 手动跑且 stdin 是终端：退回当前分支
+branches=""
+saw_refs=0
+if [[ ! -t 0 ]]; then
+  input="$(cat 2>/dev/null || true)"
+  if [[ -n "$input" ]]; then
+    saw_refs=1
+    branches="$(printf '%s\n' "$input" \
+      | awk '$1 ~ /^refs\/heads\// { sub(/^refs\/heads\//, "", $1); print $1 }')"
+  fi
+fi
+if [[ -z "$branches" ]]; then
+  if (( saw_refs )); then
+    echo "✔ CI 守卫：非分支推送（只推 tag），放行（tag 有自己的 concurrency 组）"
+    exit 0
+  fi
+  branches="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+fi
+case "$branches" in
+  ""|"HEAD") echo "✔ CI 守卫：分离头指针，没有要守的分支，放行"; exit 0 ;;
+esac
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "⚠ CI 守卫：没找到 gh，跳过检查（失败开放）"
+  exit 0
+fi
+
+# ── 便携超时：macOS 没有 coreutils 的 timeout，用「后台跑 + 到点 kill」 ──
+OUT="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/ci-guard.$$")"
+trap 'rm -f "$OUT"' EXIT
+
+list_runs() {   # $1 = 分支；输出 "id<TAB>status<TAB>title" 每行一条；超时/失败返回非 0
+  local b="$1"
+  # 整个探测放进子 shell，并把子 shell 的 stderr 关掉：
+  # 看门狗 kill 掉 gh 时 bash 会打一句 "Terminated: 15" —— 它会污染 push 输出，
+  # 而守卫在放行时应当安静（钩子的老规矩：没事别出声）。
+  (
+    gh run list --branch "$b" \
+        --status in_progress --status queued --status pending --status waiting \
+        --limit 20 \
+        --json databaseId,status,displayTitle \
+        -q '.[] | "\(.databaseId)\t\(.status)\t\(.displayTitle)"' \
+        >"$OUT" 2>/dev/null &
+    ghpid=$!
+    ( sleep "${CI_GUARD_TIMEOUT:-15}"; kill "$ghpid" 2>/dev/null ) >/dev/null 2>&1 &
+    killer=$!
+    wait "$ghpid" 2>/dev/null
+    rc=$?
+    kill "$killer" 2>/dev/null
+    exit "$rc"
+  ) 2>/dev/null
+}
+
+blocked=0
+for b in $branches; do
+  if ! list_runs "$b"; then
+    echo "⚠ CI 守卫：查询 GitHub 失败（未登录 / 断网 / 超时），跳过对 $b 的检查"
+    continue
+  fi
+  n="$(wc -l <"$OUT" | tr -d ' ')"
+  [[ "$n" == "0" || -z "$n" ]] && continue
+
+  blocked=1
+  echo "✘ CI 守卫：$b 上还有 ${n} 个运行没结束，先别推 —— "
+  while IFS=$'\t' read -r id status title; do
+    [[ -z "$id" ]] && continue
+    echo "    #${id}  ${status}  ${title}"
+  done <"$OUT"
+  echo
+  echo "  现在推会让上面这些被取消或排队，之前那次运行的结果就白跑了。"
+  echo "  等它跑完：   gh run watch <上面的 #id> --exit-status"
+  echo "  确实要现在推：SKIP_CI_GUARD=1 git push ..."
+done
+
+exit "$blocked"

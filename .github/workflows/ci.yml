@@ -13,9 +13,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # 同一分支的新推送取消上一次未跑完的任务，省额度也避免排队
+  # 保留 concurrency（同 ref 串行，不并行抢资源），但**只对 PR 取消在跑的那次**：
+  # 主分支上「新推送取消上一次」会把真正在验证的那次运行半路掐掉（踩过：推一个文档
+  # 提交把上一次完整验证 run 取消了，还得重跑）。主分支的推送改为**排队**，两次结果都拿到。
+  #
+  # 配套的本地预防是 .githooks/pre-push → scripts/ci-guard.sh：
+  # CI 在跑时直接拦住 push，而不是事后靠 concurrency 补救。两条腿缺一不可。
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

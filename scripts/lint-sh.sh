@@ -12,6 +12,11 @@
 #      「本机干净检出」验证抓不到这类问题（同一台机器上那些路径依然存在），
 #      只有换机器（CI）才暴露 —— 实测被这个坑掉过一次 CI，故做成检查。
 #
+#   4. CI 守卫与 concurrency 的配置完整性：
+#      预推送守卫（.githooks/pre-push）存在且可执行；ci.yml 里不许出现**无条件**的
+#      cancel-in-progress: true（那会取消正在跑的主分支运行）。规则写进 AGENTS.md
+#      的同时必须有东西能在被「顺手简化」回去时报警。
+#
 #   用法：bash scripts/lint-sh.sh
 #
 set -uo pipefail
@@ -118,6 +123,52 @@ sys.exit(1 if bad else 0)
 PY
 cfg_status=$?
 (( cfg_status != 0 )) && problems=$((problems + 1))
+
+echo "── 4. CI 守卫与 concurrency 配置（防「顺手简化」回去） ────"
+"$PY_BIN" - "$ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+bad = 0
+
+# (a) 预推送守卫必须在，且带可执行位（没可执行位 git 会静默忽略它）
+guard = root / '.githooks' / 'pre-push'
+if not guard.is_file():
+    print("  ✘ .githooks/pre-push 不存在 —— CI 预推送守卫没了")
+    bad += 1
+elif not (guard.stat().st_mode & 0o111):
+    print("  ✘ .githooks/pre-push 没有可执行位（git 会静默忽略它）")
+    bad += 1
+
+wf = root / '.github' / 'workflows' / 'ci.yml'
+if not wf.is_file():
+    print("  ✘ 找不到 .github/workflows/ci.yml")
+    bad += 1
+else:
+    text = wf.read_text(encoding='utf-8')
+
+    # (b) cancel-in-progress 不能是无条件的 true：
+    #     那会把正在跑的主分支运行也取消掉（本工程踩过）
+    for lineno, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if s.startswith('#') or not s.startswith('cancel-in-progress:'):
+            continue
+        if s.split(':', 1)[1].strip() == 'true':
+            print(f"  ✘ ci.yml:{lineno}  cancel-in-progress: true（无条件）"
+                  f"  → 会取消正在跑的主分支运行，应写成条件式（仅 PR 取消）")
+            bad += 1
+
+    # (c) concurrency 本身要在：它是取消/排队的兜底
+    if 'concurrency:' not in text:
+        print("  ✘ ci.yml 里没有 concurrency：同分支连续推送会并行跑、互相抢资源")
+        bad += 1
+
+print("  ✔ 未发现" if bad == 0 else f"  共 {bad} 处")
+sys.exit(1 if bad else 0)
+PY
+guard_status=$?
+(( guard_status != 0 )) && problems=$((problems + 1))
 
 echo
 if (( problems == 0 )); then

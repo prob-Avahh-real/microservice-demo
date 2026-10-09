@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# git pre-push 钩子。
+#
+# 启用（每个克隆各做一次）：
+#   bash scripts/setup-git-hooks.sh
+# 或手动：
+#   git config core.hooksPath .githooks
+#
+# 逻辑全在 scripts/ci-guard.sh 里 —— 钩子只做一层转发，
+# 这样守卫可以单独跑、单独测，不必先提交一次才能验证。
+#
+# 绕过：SKIP_CI_GUARD=1 git push ...
+#       （不要用 --no-verify，它会把所有钩子一起跳过）
+
+# 用钩子自身的位置定位仓库根：git 跑钩子时的 cwd 不保证是工作区根目录
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "$HOOK_DIR/../scripts/ci-guard.sh" "$@"

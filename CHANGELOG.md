@@ -45,6 +45,13 @@
 - **产物瘦身**：取消每次 CI 上传 `service-jars`（5 个 Boot fat jar 合计 ~327MB），
   改为 android / release job 内自行 `mvn -DskipTests package`（Maven cache 复用，几十秒）；
   日常 CI 产物只剩 APK(3.4MB) + 失败日志，可下载的 jar 改由 Release 提供
+- **concurrency 保留，但不再掐主分支**：`cancel-in-progress` 改为条件式（仅 PR 取消），
+  主分支上的新推送改为**排队**而不是取消上一次。
+  起因：推一个纯文档提交，把正在跑的完整验证 run 取消了，结果还得重跑。
+- **CI 预推送守卫**（本地预防那条腿）：`.githooks/pre-push` → `scripts/ci-guard.sh`，
+  CI 在跑时直接拦住 push 并列出在跑的 run；**失败开放**（gh 缺失/未登录/断网/超时只提示不拦，
+  一个会因工具故障挡住正常推送的守卫比没有更糟）；逃生口 `SKIP_CI_GUARD=1`。
+  启用：`bash scripts/setup-git-hooks.sh`（`core.hooksPath` 是本地配置，不随克隆自动生效）
 - CI 跑的就是本地那套命令，本地绿 = CI 绿，避免「我机器上能跑」
 - 失败时上传 `.run/logs/` 与 `.run/e2e.log`（排查用）；日常成功产物只有 APK
 - `scripts/stop-all.sh` 增加 lsof 缺失时的兜底（Linux runner 通常没装 lsof，原来会直接失效）
