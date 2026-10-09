@@ -21,6 +21,14 @@ cd "$ROOT"
 
 problems=0
 
+# python 解释器：macOS / Ubuntu 是 python3；Windows 的 Git Bash 里通常只有 python。
+# 不写死 python3 才能在 CI 的 Windows 矩阵上跑。
+PY_BIN="$(command -v python3 || command -v python || true)"
+if [[ -z "$PY_BIN" ]]; then
+  echo "找不到 python（需要 python3 或 python）" >&2
+  exit 2
+fi
+
 echo "── 1. 语法检查 (bash -n) ────────────────────────────────"
 while IFS= read -r f; do
   if ! bash -n "$f" 2>/tmp/lint-sh.err; then
@@ -31,7 +39,7 @@ while IFS= read -r f; do
 done < <(find . -name '*.sh' -not -path './mobile/node_modules/*' -not -path './*/target/*' | sort)
 
 echo "── 2. \$var 紧跟多字节字符（bash 3.2 变量名被吃掉） ──────"
-python3 - "$ROOT" <<'PY'
+"$PY_BIN" - "$ROOT" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -65,7 +73,7 @@ py_status=$?
 (( py_status != 0 )) && problems=$((problems + 1))
 
 echo "── 3. 受版本控制的配置里有没有本机绝对路径 ──────────────"
-python3 - "$ROOT" <<'PY'
+"$PY_BIN" - "$ROOT" <<'PY'
 import re
 import subprocess
 import sys

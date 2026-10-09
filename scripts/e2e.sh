@@ -28,7 +28,10 @@ fail() {
 }
 banner() { printf '\n\033[36m── %s\033[0m\n' "$1"; }
 
-val() { printf '%s' "$1" | python3 "$ROOT/scripts/jsonq.py" "$2" 2>/dev/null; }
+# python 解释器：本工程在 macOS / Ubuntu 上跑；不写死 python3 以保持一致
+PY_BIN="$(command -v python3 || command -v python || true)"
+
+val() { printf '%s' "$1" | "$PY_BIN" "$ROOT/scripts/jsonq.py" "$2" 2>/dev/null; }
 
 post_order() {
   curl -s --max-time 20 -X POST -H 'Content-Type: application/json' \
@@ -159,7 +162,7 @@ apps_raw=""
 count=0
 for _ in $(seq 1 15); do
   apps_raw="$(curl -s --max-time 5 -H 'Accept: application/json' "$EUREKA/eureka/apps" \
-    | python3 -c "
+    | "$PY_BIN" -c "
 import sys, json
 d = json.load(sys.stdin)
 print(' '.join(a['name'] for a in d.get('applications', {}).get('application', [])))

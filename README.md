@@ -221,10 +221,21 @@ curl -X POST -H 'Content-Type: application/json' \
 
 | Job | 内容 | 依赖 |
 |-----|------|------|
-| `backend` | `lint-sh.sh` → `mvn -B -ntp clean install`（22 测试）→ `e2e.sh`（起 5 进程 / 8 断言）→ 上传 5 个 jar | — |
+| `backend`（**OS 矩阵 ×3**） | `lint-sh.sh` → `mvn -B -ntp clean install`（22 测试）→ `e2e.sh`（起 5 进程 / 8 断言） | — |
 | `mobile-unit` | `npm ci` → `npm run test:unit`（8 项纯逻辑单测） | —（与 backend **并行**，快速失败） |
-| `android` | 取回 jar → `run-all.sh` → `npm test`（14 项，含打真网关的链路测试）→ `build:apk` → `verify-apk.sh` → 上传 APK | `backend` |
-| `release` | 打 tag 时把 jar + APK 附到 GitHub Release | `backend` + `android` |
+| `android` | job 内构建 jar → `run-all.sh` → `npm test`（14 项，含打真网关的链路测试）→ `build:apk` → `verify-apk.sh` → 上传 APK | `backend` |
+| `release` | 打 tag 时构建 jar，并把 jar + APK 附到 GitHub Release | `backend` + `android` |
+
+**OS 矩阵**：`ubuntu-latest` / `macos-latest` / `windows-latest` 三个平台都跑「编译 + 22 项单测」；
+端到端（起 5 个进程 + 8 项断言）只在 Linux / macOS 上跑 —— 它依赖 POSIX 进程管理
+（`nohup` + 后台 PID + `lsof`/端口探活），Git Bash 下不可靠。
+**Windows 那一格只承诺「编译 + 单测通过」**，不写成「跳过但看起来成功」。
+（Android job 固定在 ubuntu：只有 ubuntu runner 预装 Android SDK。）
+
+**产物瘦身**：不再每次 CI 上传 `service-jars`。5 个 Spring Boot fat jar 合计 **~327MB**
+（单个 43–85MB），跨 job 传它只为让 android job 起服务，不划算；
+改为 job 内 `mvn -DskipTests package`（Maven 依赖由 `setup-java` 的 cache 复用，只几十秒）。
+日常 CI 产物因此只剩 **APK（3.4MB）** + 失败日志；需要可下载的 jar 时走 **Release**。
 
 本地等价的完整门禁：
 

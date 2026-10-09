@@ -89,6 +89,8 @@ bash mobile/scripts/verify-apk.sh   # 用 aapt2 真解析 APK + 校验包内 web
 | 网关路由 / 注册中心 / 配置中心 | `scripts/e2e.sh`（第 5–8 条是这部分唯一有效的传感器） |
 | `mobile/www`（客户端逻辑） | `cd mobile && npm test`（含打真实网关的链路测试） |
 | Android 构建配置 | `npm run build:apk` + `scripts/verify-apk.sh` |
+| `.github/workflows/**` 改动 | `actionlint`（本机已装；CI 只做 YAML 校验，写错不会立刻失败） |
+| **push / 提 PR 前** | 上面相关项全部 = CI 跑的同一套命令；本地绿才推（本地绿 = CI 绿） |
 
 **停止条件**：① 成功；② 同一模块连续失败 3 次即停下重估方案（不要继续堆补丁）；
 ③ 要改版本基准 / 验收标准 / 引入外部中间件 → 先问用户。

@@ -19,12 +19,29 @@ permissions:
 
 jobs:
   # ------------------------------------------------------------------
-  # 后端：脚本体检 → 编译单测 → 端到端验收（真实起 5 个进程 + 8 项断言）
+  # 后端：OS 矩阵
+  #
+  # 编译 + 22 项单测在 Linux/macOS/Windows 三个系统上都验；
+  # 端到端（起 5 个进程 + 8 项断言）只在 Linux/macOS 上验：
+  # 它依赖 POSIX 进程管理（nohup + 后台 PID + lsof/端口探活），Git Bash 下不可靠。
+  # 与其把 Windows 的 e2e 写成「跳过但看起来成功」，不如把边界显式标出来 ——
+  # Windows 这一格只承诺「编译 + 单测通过」。
   # ------------------------------------------------------------------
   backend:
-    name: 后端（lint + 构建 + 单测 + 端到端）
-    runs-on: ubuntu-latest
+    name: 后端（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false          # 一个平台挂了，另外两个照样出结果，便于对比
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            e2e: true
+          - os: macos-latest
+            e2e: true
+          - os: windows-latest
+            e2e: false
     steps:
       - uses: actions/checkout@v4
 
@@ -35,38 +52,32 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: shell 脚本体检（bash -n + bash 3.2 多字节变量名坑）
+      - name: 仓库体检（bash -n / bash 3.2 多字节变量名 / 受控文件不得含本机绝对路径）
+        shell: bash
         run: bash scripts/lint-sh.sh
 
       - name: 编译 + 单测（22 项）
         run: mvn -B -ntp clean install
 
       - name: 端到端验收（起 5 个进程，8 项断言，退出码即结论）
+        if: matrix.e2e
+        shell: bash
         run: bash scripts/e2e.sh
 
       - name: 失败时上传服务日志（排查用）
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: service-logs
+          name: service-logs-${{ matrix.os }}
           path: |
             .run/logs/
             .run/e2e.log
           if-no-files-found: ignore
-          retention-days: 7
-
-      - name: 上传可执行 jar（供 Android job 与 Release 使用）
-        uses: actions/upload-artifact@v4
-        with:
-          name: service-jars
-          # 各模块 target/ 下的 fat jar；run-all.sh 会自行忽略 .jar.original
-          path: |
-            */target/*.jar
-            !*/target/*.jar.original
-          retention-days: 7
+          retention-days: 5
 
       - name: 停止服务
         if: always()
+        shell: bash
         run: bash scripts/stop-all.sh || true
 
   # ------------------------------------------------------------------
@@ -95,7 +106,12 @@ jobs:
         run: npm run test:unit
 
   # ------------------------------------------------------------------
-  # Android：需要真网关 → 依赖 backend 的 jar；跑链路测试 + 出 APK + 校验产物
+  # Android：需要真网关 → **在 job 内构建 jar**，不再跨 job 传 fat jar
+  #
+  # 为什么不保留 jar 产物：5 个 Spring Boot fat jar 合计 ~327MB（单个 43–85MB）。
+  # 每次 CI 上传 + 下载 300MB+ 只为让下一个 job 起服务，不划算。
+  # actions/setup-java 的 Maven cache 让 job 内重新 package 只要几十秒。
+  # 需要「可下载的 jar」时走 Release（打 tag 时构建并附上）——那才是它该待的地方。
   # ------------------------------------------------------------------
   android:
     name: Android 客户端（链路测试 + APK）
@@ -119,12 +135,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: 取回后端 jar（artifact 会还原成 <服务>/target/*.jar）
-        uses: actions/download-artifact@v4
-        with:
-          name: service-jars
+      - name: 构建可执行 jar（跳过测试：测试已在 backend 矩阵里跑过）
+        run: mvn -B -ntp -DskipTests package
 
       - name: 起后端（链路测试要打真实网关）
+        shell: bash
         run: |
           chmod +x scripts/*.sh mobile/scripts/*.sh
           bash scripts/run-all.sh
@@ -142,6 +157,7 @@ jobs:
         run: npm run build:apk
 
       - name: 校验 APK 产物（aapt2 真解析 + 包内 web 资源）
+        shell: bash
         run: bash mobile/scripts/verify-apk.sh
 
       - name: 上传 APK
@@ -158,10 +174,11 @@ jobs:
           name: android-service-logs
           path: .run/logs/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 5
 
       - name: 停止服务
         if: always()
+        shell: bash
         run: bash scripts/stop-all.sh || true
 
   # ------------------------------------------------------------------
@@ -177,15 +194,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 取回 jar
-        uses: actions/download-artifact@v4
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
         with:
-          name: service-jars
+          distribution: temurin
+          java-version: '21'
+          cache: maven
 
       - name: 取回 APK
         uses: actions/download-artifact@v4
         with:
           name: app-debug-apk
+
+      - name: 构建可下载的 jar（jar 只在 Release 提供，日常 CI 不上传）
+        run: mvn -B -ntp -DskipTests package
 
       - name: 发 Release（自动生成说明 + 附 jar/APK）
         uses: softprops/action-gh-release@v2

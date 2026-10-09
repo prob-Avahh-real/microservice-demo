@@ -37,11 +37,16 @@
 
 ### Added — CI/CD
 
-- `.github/workflows/ci.yml` —— 4 个 job：`backend`（lint → 构建单测 → 端到端）/
-  `mobile-unit`（与 backend **并行**，快速失败）/ `android`（取回 jar → 起服务 → 链路测试 → 出 APK → 校验产物）/
-  `release`（打 tag 时把 jar 与 APK 附到 GitHub Release）
+- `.github/workflows/ci.yml` —— 4 个 job：`backend`（OS 矩阵：lint → 构建单测 → 端到端）/
+  `mobile-unit`（与 backend **并行**，快速失败）/ `android`（job 内构建 jar → 起服务 → 链路测试 → 出 APK → 校验产物）/
+  `release`（打 tag 时构建 jar 并把 jar 与 APK 附到 GitHub Release）
+- `backend` 为 **OS 矩阵**（ubuntu / macOS / Windows）：编译 + 22 项单测三平台都验；
+  端到端只在 Linux / macOS 验（依赖 POSIX 进程管理），Windows 那一格显式只承诺「编译 + 单测」
+- **产物瘦身**：取消每次 CI 上传 `service-jars`（5 个 Boot fat jar 合计 ~327MB），
+  改为 android / release job 内自行 `mvn -DskipTests package`（Maven cache 复用，几十秒）；
+  日常 CI 产物只剩 APK(3.4MB) + 失败日志，可下载的 jar 改由 Release 提供
 - CI 跑的就是本地那套命令，本地绿 = CI 绿，避免「我机器上能跑」
-- 失败时上传 `.run/logs/` 与 `.run/e2e.log`；成功上传 5 个 jar 与 APK 作为可下载产物
+- 失败时上传 `.run/logs/` 与 `.run/e2e.log`（排查用）；日常成功产物只有 APK
 - `scripts/stop-all.sh` 增加 lsof 缺失时的兜底（Linux runner 通常没装 lsof，原来会直接失效）
 - `mobile/package.json` 拆出 `test:unit` / `test:live`，让纯逻辑单测无需后端即可并行跑
 - 工作流经 `actionlint` 校验（0 问题）；已在 GitHub Actions 上**实际跑通**：
