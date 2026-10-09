@@ -6,6 +6,9 @@ name: CI
 on:
   push:
     branches: [main, master]
+    # 必须显式写 tags：只写 branches 的话推 tag **不会触发**流水线，
+    # 于是 release job 里那个 startsWith(github.ref, 'refs/tags/') 永远为假（实测踩到过）。
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -185,6 +188,10 @@ jobs:
 
   # ------------------------------------------------------------------
   # CD：打 tag 时把 jar 与 APK 附到 GitHub Release
+  #
+  # 注意 on.push 里必须同时写 branches 与 tags —— 只写 branches 时推 tag 不会触发流水线。
+  # tag 运行时全套 job 照样跑一遍，release 靠 needs 门禁：
+  # 只有这个 tag 上「矩阵 + 客户端 + APK」全部通过，才会真的发布 Release。
   # ------------------------------------------------------------------
   release:
     name: CD（打 tag → 发 Release 并附产物）
