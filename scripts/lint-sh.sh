@@ -126,19 +126,27 @@ cfg_status=$?
 
 echo "── 4. CI 守卫与 concurrency 配置（防「顺手简化」回去） ────"
 "$PY_BIN" - "$ROOT" <<'PY'
+import subprocess
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
 bad = 0
 
-# (a) 预推送守卫必须在，且带可执行位（没可执行位 git 会静默忽略它）
-guard = root / '.githooks' / 'pre-push'
-if not guard.is_file():
-    print("  ✘ .githooks/pre-push 不存在 —— CI 预推送守卫没了")
+# (a) 预推送守卫必须在，且**索引里**带可执行位（100755）。
+#     ⚠ 不能用 os.stat().st_mode 判断：Windows 没有 POSIX 可执行位，
+#     Python 在那边报的 st_mode 永远没有 0o111 —— 这个检查自己就变成了
+#     又一个「跨平台假设」（实测：加了它的那次 CI 在 windows-latest 上红了）。
+#     索引里的 mode 才是权威且跨平台的（git 靠它决定钩子能不能跑），所以问 git 要。
+guard_rel = '.githooks/pre-push'
+modes = subprocess.run(['git', '-C', str(root), 'ls-files', '-s', guard_rel],
+                       capture_output=True, text=True).stdout.split()
+if not modes:
+    print(f"  ✘ {guard_rel} 没进版本库 —— CI 预推送守卫没了")
     bad += 1
-elif not (guard.stat().st_mode & 0o111):
-    print("  ✘ .githooks/pre-push 没有可执行位（git 会静默忽略它）")
+elif modes[0] != '100755':
+    print(f"  ✘ {guard_rel} 在索引里的权限是 {modes[0]}，应为 100755"
+          f"（没有可执行位时 git 会静默忽略钩子）")
     bad += 1
 
 wf = root / '.github' / 'workflows' / 'ci.yml'

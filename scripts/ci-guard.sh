@@ -70,17 +70,22 @@ fi
 OUT="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/ci-guard.$$")"
 trap 'rm -f "$OUT"' EXIT
 
-list_runs() {   # $1 = 分支；输出 "id<TAB>status<TAB>title" 每行一条；超时/失败返回非 0
+list_runs() {   # $1 = 分支；输出 "id<TAB>status<TAB>title"；超时/失败返回非 0
   local b="$1"
-  # 整个探测放进子 shell，并把子 shell 的 stderr 关掉：
+  # 整段放进子 shell 并关掉它的 stderr：
   # 看门狗 kill 掉 gh 时 bash 会打一句 "Terminated: 15" —— 它会污染 push 输出，
-  # 而守卫在放行时应当安静（钩子的老规矩：没事别出声）。
+  # 而守卫放行时应当安静（钩子的老规矩：没事别出声）。
+  #
+  # ⚠ 不能加 `gh run list --branch <b>`：那是**服务端 filter**，对刚启动的 run
+  #   会因为索引延迟而查不到（实测：一次 push 后 12s 用 --branch 查不到在跑的 run，
+  #   守卫于是静默放行 —— 最需要拦的时候正好漏掉）。
+  #   改为只按 status 查，再**本地**用 headBranch 匹配：headBranch 字段本身是即时可用的。
   (
-    gh run list --branch "$b" \
+    gh run list \
         --status in_progress --status queued --status pending --status waiting \
-        --limit 20 \
-        --json databaseId,status,displayTitle \
-        -q '.[] | "\(.databaseId)\t\(.status)\t\(.displayTitle)"' \
+        --limit 50 \
+        --json databaseId,status,headBranch,displayTitle \
+        -q ".[] | select(.headBranch == \"$b\") | \"\(.databaseId)\t\(.status)\t\(.displayTitle)\"" \
         >"$OUT" 2>/dev/null &
     ghpid=$!
     ( sleep "${CI_GUARD_TIMEOUT:-15}"; kill "$ghpid" 2>/dev/null ) >/dev/null 2>&1 &
@@ -99,7 +104,11 @@ for b in $branches; do
     continue
   fi
   n="$(wc -l <"$OUT" | tr -d ' ')"
-  [[ "$n" == "0" || -z "$n" ]] && continue
+  if [[ "$n" == "0" || -z "$n" ]]; then
+    # 放行时默认静默（钩子老规矩）；想看它在工作就开 CI_GUARD_VERBOSE=1
+    [[ -n "${CI_GUARD_VERBOSE:-}" ]] && echo "✔ CI 守卫：$b 上没有在跑的运行，放行"
+    continue
+  fi
 
   blocked=1
   echo "✘ CI 守卫：$b 上还有 ${n} 个运行没结束，先别推 —— "
