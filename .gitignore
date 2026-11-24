@@ -26,3 +26,20 @@ mobile/.idea/
 *.iml
 .vscode/
 .DS_Store
+
+# Build, cache & secret exclusions
+.env
+.env.*
+!.env.example
+.npm-cache/
+.build/
+DerivedData/
+.gradle/
+android/app/build/
+android/build/
+android/.gradle/
+__pycache__/
+.venv/
+*.apk
+*.aab
+*.ipa
